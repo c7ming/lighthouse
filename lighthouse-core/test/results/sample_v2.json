@@ -688,8 +688,8 @@
             "displayedSize": "480 x 318",
             "actualSize": "480 x 318",
             "actualPixels": 152640,
-            "expectedSize": "1260 x 835",
-            "expectedPixels": 1052100
+            "expectedSize": "960 x 636",
+            "expectedPixels": 610560
           }
         ]
       }
@@ -3626,7 +3626,7 @@
           {
             "statistic": "Total DOM Elements",
             "element": "",
-            "value": "31"
+            "value": 31
           },
           {
             "statistic": "Maximum DOM Depth",
@@ -3634,7 +3634,7 @@
               "type": "code",
               "value": "<h2>"
             },
-            "value": "3"
+            "value": 3
           },
           {
             "statistic": "Maximum Child Elements",
@@ -3642,7 +3642,7 @@
               "type": "code",
               "value": "<body>"
             },
-            "value": "29"
+            "value": 29
           }
         ]
       }
@@ -5587,6 +5587,12 @@
       },
       {
         "startTime": 0,
+        "name": "lh:computed:PageDependencyGraph",
+        "duration": 100,
+        "entryType": "measure"
+      },
+      {
+        "startTime": 0,
         "name": "lh:audit:redirects",
         "duration": 100,
         "entryType": "measure"
@@ -5606,12 +5612,6 @@
       {
         "startTime": 0,
         "name": "lh:computed:LanternFirstContentfulPaint",
-        "duration": 100,
-        "entryType": "measure"
-      },
-      {
-        "startTime": 0,
-        "name": "lh:computed:PageDependencyGraph",
         "duration": 100,
         "entryType": "measure"
       },
