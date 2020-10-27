@@ -52,6 +52,6 @@ set -e
 
 # Copy results to latest-run folder.
 # Sometimes there will be extra output before the line with LHR. To get around this, only copy the last line with content.
-awk '/./{line=$0} END{print line}' \
+grep "lighthouseVersion" -m 1 \
 "$LH_ROOT/.tmp/layout-test-results/http/tests/devtools/lighthouse/lighthouse-run-dt-actual.txt" \
 > "$LH_ROOT/latest-run/devtools-lhr.json" 
