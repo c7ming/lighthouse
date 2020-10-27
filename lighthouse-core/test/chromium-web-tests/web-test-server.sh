@@ -6,14 +6,16 @@
 # Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 ##
 
+set -euo pipefail
+
+# Get newest folder
+latest_content_shell_dir=$(ls -t "$LH_ROOT/.tmp/chromium-web-tests/content-shells/" | head -n1)
+export latest_content_shell="$LH_ROOT/.tmp/chromium-web-tests/content-shells/$latest_content_shell_dir"
+
 # Run a very basic server on port 8000. Only thing we need is:
 #   - /devtools -> the layout tests for devtools frontend
 #   - /inspector-sources -> the inspector resources from the content shell
 #   - CORS (Access-Control-Allow-Origin header)
-
-# Get newest folder
-latest_content_shell_dir=$(ls -t "$LH_ROOT/.tmp/chromium-web-tests/content-shells/" | head -n1)
-latest_content_shell="$LH_ROOT/.tmp/chromium-web-tests/content-shells/$latest_content_shell_dir"
 
 ln -s "$DEVTOOLS_PATH/out/Default/resources/inspector" "$DEVTOOLS_PATH/test/webtests/http/tests/inspector-sources"
 
@@ -51,8 +53,7 @@ python \
   "$BLINK_TOOLS_PATH/latest/third_party/blink/tools/run_web_tests.py" \
   --layout-tests-directory="$DEVTOOLS_PATH/test/webtests" \
   --build-directory="$latest_content_shell/out" \
-  $* \
-  http/tests/devtools/lighthouse
+  $*
 status=$?
 
 set +x
@@ -61,11 +62,5 @@ set -e
 rm -rf "$LH_ROOT/.tmp/layout-test-results"
 cp -r "$latest_content_shell/out/Release/layout-test-results" "$LH_ROOT/.tmp/layout-test-results"
 cp "$DEVTOOLS_PATH/test/webtests/http/tests/devtools/lighthouse/"*-expected.txt "$LH_ROOT/third-party/chromium-webtests/webtests/http/tests/devtools/lighthouse"
-
-if [ ! $status -eq 0 ]; then
-  # Print failure diffs to stdout.
-  find "$LH_ROOT/.tmp/layout-test-results/retry_3" -name '*-diff.txt' -exec cat {} \;
-  echo "❌❌❌ webtests failed. to rebaseline run: yarn update:test-devtools ❌❌❌"
-fi
 
 exit $status

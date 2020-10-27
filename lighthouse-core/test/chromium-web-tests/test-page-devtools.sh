@@ -12,10 +12,10 @@ if [ -z "$1" ]; then
 fi
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LH_ROOT="$SCRIPT_DIR/../../.."
-TEST_DIR="$LH_ROOT/.tmp/chromium-web-tests"
+export LH_ROOT="$SCRIPT_DIR/../../.."
 
 # Setup dependencies.
+TEST_DIR="$LH_ROOT/.tmp/chromium-web-tests"
 export DEPOT_TOOLS_PATH="$TEST_DIR/depot-tools"
 export DEVTOOLS_PATH=${DEVTOOLS_PATH:-"$TEST_DIR/devtools/devtools-frontend"}
 export BLINK_TOOLS_PATH="$TEST_DIR/blink_tools"
@@ -26,23 +26,9 @@ bash "$SCRIPT_DIR/download-devtools.sh"
 bash "$SCRIPT_DIR/download-blink-tools.sh"
 bash "$SCRIPT_DIR/download-content-shell.sh"
 
-set -euo pipefail
+set -e
 
-# Get newest folder
-latest_content_shell_dir=$(ls -t "$LH_ROOT/.tmp/chromium-web-tests/content-shells/" | head -n1)
-latest_content_shell="$LH_ROOT/.tmp/chromium-web-tests/content-shells/$latest_content_shell_dir"
-
-# Run a very basic server on port 8000. Only thing we need is:
-#   - /devtools -> the layout tests for devtools frontend
-#   - /inspector-sources -> the inspector resources from the content shell
-#   - CORS (Access-Control-Allow-Origin header)
-
-# Setup inspector-sources.
-yarn devtools "$DEVTOOLS_PATH"
-cd "$DEVTOOLS_PATH"
-autoninja -C out/Default # Build devtools resources.
-cd -
-ln -s "$DEVTOOLS_PATH/out/Default/resources/inspector" "$DEVTOOLS_PATH/test/webtests/http/tests/inspector-sources"
+bash "$SCRIPT_DIR/roll-devtools.sh"
 
 # Add test to run lighthouse in DevTools and print LHR.
 echo "
@@ -60,49 +46,12 @@ echo "
 })();
 " > "$DEVTOOLS_PATH/test/webtests/http/tests/devtools/lighthouse/lighthouse-run-dt.js"
 
-# Kill background jobs and remove temporary files when script ends.
-cleanup() {
-  rm "$DEVTOOLS_PATH/test/webtests/http/tests/inspector-sources"
-  rm "$DEVTOOLS_PATH/test/webtests/http/tests/devtools/lighthouse/lighthouse-run-dt.js"
-  kill ${SERVER_PID}
-}
-trap 'cleanup' EXIT
-
-# Serve from devtools frontend webtests folder.
-(npx http-server@0.12.3 "$DEVTOOLS_PATH/test/webtests/http/tests" -p 8000 --cors > /dev/null 2>&1) &
-SERVER_PID=$!
-
-echo "Waiting for server"
-health_check_url='http://localhost:8000/inspector-sources/integration_test_runner.html?experiments=true&test=http://127.0.0.1:8000/devtools/lighthouse/lighthouse-view-trace-run.js'
-until $(curl --output /dev/null --silent --head --fail $health_check_url); do
-  printf '.'
-  sleep 1
-done
-echo "Server is up"
-
-# webtests sometimes error if results are already present.
-rm -rf "$latest_content_shell/out/Release/layout-test-results"
-
-# Add typ to python path. The regular method assumes there is a Chromium checkout.
-export PYTHONPATH="${PYTHONPATH:-}:$BLINK_TOOLS_PATH/latest/third_party/typ"
-
-# Don't quit if the python command fails.
 set +e
-
-python \
-  "$BLINK_TOOLS_PATH/latest/third_party/blink/tools/run_web_tests.py" \
-  --layout-tests-directory="$DEVTOOLS_PATH/test/webtests" \
-  --build-directory="$latest_content_shell/out" \
-  --no-show-results \
-  --time-out-ms=60000 \
-  http/tests/devtools/lighthouse/lighthouse-run-dt.js
-
+bash "$SCRIPT_DIR/web-test-server.sh" --no-show-results --time-out-ms=60000 http/tests/devtools/lighthouse/lighthouse-run-dt.js
 set -e
-
-rm -rf "$LH_ROOT/.tmp/layout-test-results"
 
 # Copy results to latest-run folder.
 # Sometimes there will be extra output before the line with LHR. To get around this, only copy the last line with content.
 awk '/./{line=$0} END{print line}' \
-"$latest_content_shell/out/Release/layout-test-results/http/tests/devtools/lighthouse/lighthouse-run-dt-actual.txt" \
+"$LH_ROOT/.tmp/layout-test-results/http/tests/devtools/lighthouse/lighthouse-run-dt-actual.txt" \
 > "$LH_ROOT/latest-run/devtools-lhr.json" 

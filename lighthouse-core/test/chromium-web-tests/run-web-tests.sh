@@ -6,12 +6,18 @@
 # Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
 ##
 
-set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export LH_ROOT="$SCRIPT_DIR/../../.."
 
 bash "$SCRIPT_DIR/roll-devtools.sh"
-bash "$SCRIPT_DIR/web-test-server.sh" $*
+bash "$SCRIPT_DIR/web-test-server.sh" http/tests/devtools/lighthouse $*
+status=$?
 
-exit $?
+if [ ! $status -eq 0 ]; then
+  # Print failure diffs to stdout.
+  find "$LH_ROOT/.tmp/layout-test-results/retry_3" -name '*-diff.txt' -exec cat {} \;
+  echo "❌❌❌ webtests failed. to rebaseline run: yarn update:test-devtools ❌❌❌"
+fi
+
+exit $status
