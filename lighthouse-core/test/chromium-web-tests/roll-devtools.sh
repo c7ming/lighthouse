@@ -16,11 +16,6 @@ roll_devtools() {
   cd -
 }
 
-# Run a very basic server on port 8000. Only thing we need is:
-#   - /devtools -> the layout tests for devtools frontend
-#   - /inspector-sources -> the inspector resources from the content shell
-#   - CORS (Access-Control-Allow-Origin header)
-
 # Setup inspector-sources.
 cd "$DEVTOOLS_PATH"
 git --no-pager log -1
