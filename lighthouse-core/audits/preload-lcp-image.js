@@ -52,7 +52,7 @@ class PreloadLCPImageAudit extends Audit {
     // It's not a request loaded over the network, don't recommend it.
     if (URL.NON_NETWORK_PROTOCOLS.includes(request.protocol)) return false;
     // It's already discoverable from the main document, don't recommend it.
-    if (initiatorPath.length <= mainResourceDepth) return false;
+    if (initiatorPath.length <= mainResourceDepth + 1) return false;
     // Finally, return whether or not it belongs to the main frame
     return request.frameId === mainResource.frameId;
   }
@@ -110,10 +110,64 @@ class PreloadLCPImageAudit extends Audit {
    * @return {{wastedMs: number, results: Array<{url: string, wastedMs: number}>}}
    */
   static computeWasteWithGraph(lcpNode, graph, simulator) {
-    const simulation = simulator.simulate(graph, {flexibleOrdering: true});
-    // For now, we are simply using the duration of the LCP image request as the wastedMS value
-    const lcpTiming = simulation.nodeTimings.get(lcpNode);
-    const wastedMs = lcpTiming && lcpTiming.duration || 0;
+    const simulationBeforeChanges = simulator.simulate(graph, {flexibleOrdering: true});
+    const modifiedGraph = graph.cloneWithRelationships();
+
+    // Store the IDs of the LCP Node's dependencies for later
+    /** @type {Set<string>} */
+    const dependenciesIds = new Set();
+    for (const node of lcpNode.getDependencies()) {
+      dependenciesIds.add(node.id);
+    }
+
+    /** @type {LH.Gatherer.Simulation.GraphNode|null} */
+    let modifiedLCPNode = null;
+    /** @type {LH.Gatherer.Simulation.GraphNode|null} */
+    let mainDocumentNode = null;
+    modifiedGraph.traverse(node => {
+      if (node.type !== 'network') return;
+
+      const networkNode = /** @type {LH.Gatherer.Simulation.GraphNetworkNode} */ (node);
+      if (node.isMainDocument()) {
+        mainDocumentNode = networkNode;
+      } else if (networkNode.record.url === lcpNode.record.url) {
+        modifiedLCPNode = networkNode;
+      }
+    });
+
+    if (!mainDocumentNode) {
+      // Should always find the main document node
+      throw new Error('Could not find main document node');
+    }
+
+    if (!modifiedLCPNode) {
+      // Should always find the LCP node as well or else this function wouldn't have been called
+      throw new Error('Could not find the LCP node');
+    }
+
+    modifiedLCPNode.removeAllDependencies();
+    modifiedLCPNode.addDependency(mainDocumentNode);
+
+    const simulationAfterChanges = simulator.simulate(modifiedGraph, {flexibleOrdering: true});
+    const lcpTimingsBefore = simulationBeforeChanges.nodeTimings.get(lcpNode);
+    const lcpTimingsAfter = simulationAfterChanges.nodeTimings.get(modifiedLCPNode);
+    /** @type {Map<String, LH.Gatherer.Simulation.GraphNode>} */
+    const modifiedNodesById = Array.from(simulationAfterChanges.nodeTimings.keys())
+      .reduce((map, node) => map.set(node.id, node), new Map());
+    const lcpEndTimeBefore = lcpTimingsBefore && lcpTimingsBefore.endTime || 0;
+    const lcpEndTimeAfter = lcpTimingsAfter && lcpTimingsAfter.endTime || 0;
+
+    let maxDependencyEndTime = 0;
+    for (const nodeId of Array.from(dependenciesIds)) {
+      const node = modifiedNodesById.get(nodeId);
+      // @ts-expect-error node should never be undefined
+      const timings = simulationAfterChanges.nodeTimings.get(node);
+      const endTime = timings && timings.endTime || 0;
+      maxDependencyEndTime = Math.max(maxDependencyEndTime, endTime);
+    }
+
+    const wastedMs = lcpEndTimeBefore - Math.max(lcpEndTimeAfter, maxDependencyEndTime);
+
     return {
       wastedMs,
       results: [{
